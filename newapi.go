@@ -10,12 +10,14 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 const anthropicBaseURL = "https://openrouter.ai/api"
 
 type newAPIClient struct {
+	mu                           sync.RWMutex
 	baseURL, accessToken, userID string
 	httpClient                   *http.Client
 }
@@ -31,11 +33,27 @@ func newClient(cfg config) *newAPIClient {
 }
 
 func (c *newAPIClient) configured() bool {
-	return c.baseURL != "" && c.accessToken != "" && c.userID != ""
+	baseURL, accessToken, userID := c.connection()
+	return baseURL != "" && accessToken != "" && userID != ""
+}
+
+func (c *newAPIClient) configure(baseURL, accessToken, userID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	c.accessToken = strings.TrimSpace(accessToken)
+	c.userID = strings.TrimSpace(userID)
+}
+
+func (c *newAPIClient) connection() (string, string, string) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.baseURL, c.accessToken, c.userID
 }
 
 func (c *newAPIClient) request(ctx context.Context, method, path string, body any) (json.RawMessage, error) {
-	if !c.configured() {
+	baseURL, accessToken, userID := c.connection()
+	if baseURL == "" || accessToken == "" || userID == "" {
 		return nil, errors.New("服务端尚未配置 New API 地址、个人密钥和用户 ID")
 	}
 	var reader io.Reader
@@ -46,12 +64,12 @@ func (c *newAPIClient) request(ctx context.Context, method, path string, body an
 		}
 		reader = bytes.NewReader(encoded)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reader)
+	req, err := http.NewRequestWithContext(ctx, method, baseURL+path, reader)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", c.accessToken)
-	req.Header.Set("New-Api-User", c.userID)
+	req.Header.Set("Authorization", accessToken)
+	req.Header.Set("New-Api-User", userID)
 	req.Header.Set("Content-Type", "application/json")
 	res, err := c.httpClient.Do(req)
 	if err != nil {

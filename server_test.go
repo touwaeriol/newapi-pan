@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -15,6 +17,7 @@ import (
 type fakeStore struct {
 	users    []user
 	sessions map[string]user
+	saved    *storedPlatformSettings
 }
 
 func (f *fakeStore) authenticate(username, password string) (user, error) {
@@ -50,6 +53,13 @@ func (f *fakeStore) createUser(string, string) (user, error)                    
 func (f *fakeStore) updateUser(int64, *int, string) error                        { return nil }
 func (f *fakeStore) addUpload(context.Context, int64, string, int, bool, string) {}
 func (f *fakeStore) listUploads() ([]map[string]any, error)                      { return []map[string]any{}, nil }
+func (f *fakeStore) getPlatformSettings() (storedPlatformSettings, error) {
+	return storedPlatformSettings{}, sql.ErrNoRows
+}
+func (f *fakeStore) savePlatformSettings(settings storedPlatformSettings) error {
+	f.saved = &settings
+	return nil
+}
 
 func newTestCookieJar(t *testing.T) http.CookieJar {
 	t.Helper()
@@ -142,5 +152,52 @@ func TestUserCanCreateChannelButCannotManageUsers(t *testing.T) {
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusForbidden {
 		t.Fatalf("admin route status = %d, want 403", res.StatusCode)
+	}
+}
+
+func TestAdminCanSaveEncryptedNewAPISettings(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/group/":
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": []string{"default"}})
+		case "/api/channel/models_enabled":
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": []string{"gpt-4o"}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+
+	st := &fakeStore{users: []user{{ID: 1, Username: "member", Role: "admin", Status: 1}}, sessions: map[string]user{}}
+	cfg := config{SessionTTL: time.Hour, SettingsKey: bytes.Repeat([]byte{3}, 32)}
+	app := httptest.NewServer(newServer(cfg, st).routes())
+	defer app.Close()
+	client := &http.Client{Jar: newTestCookieJar(t)}
+	res, err := client.Post(app.URL+"/api/auth/login", "application/json", strings.NewReader(`{"username":"member","password":"member-pass-123"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+
+	body := `{"newapi_base_url":"` + upstream.URL + `","newapi_access_token":"secret-token","newapi_user_id":"1"}`
+	req, err := http.NewRequest(http.MethodPut, app.URL+"/api/admin/settings", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err = client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("settings status = %d", res.StatusCode)
+	}
+	if st.saved == nil || st.saved.AccessTokenEncrypted == "secret-token" {
+		t.Fatal("access token was not encrypted")
+	}
+	plaintext, err := decryptSecret(cfg.SettingsKey, st.saved.AccessTokenEncrypted)
+	if err != nil || plaintext != "secret-token" {
+		t.Fatalf("saved token decrypt failed: %v", err)
 	}
 }

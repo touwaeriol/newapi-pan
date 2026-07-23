@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>渠道上传平台</title>
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/settings.css">
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -34,6 +35,15 @@
 
       <div id="admin-view" class="hidden content">
         <div class="hero"><div><span class="eyebrow">ADMINISTRATION</span><h1>平台用户</h1><p>创建账号、停用访问、重置密码，并查看渠道创建审计。</p></div><button id="show-create-user" class="primary">＋ 创建用户</button></div>
+        <section class="panel settings-panel">
+          <div class="panel-title"><div><h2>New API 连接配置</h2><span>个人密钥加密保存，保存前自动验证分组接口</span></div><span id="settings-status" class="status">未配置</span></div>
+          <form id="newapi-settings-form" class="form-grid settings-form">
+            <label>New API 地址 *<input name="newapi_base_url" type="url" required placeholder="https://api.example.com"></label>
+            <label>New API 用户 ID *<input name="newapi_user_id" inputmode="numeric" required placeholder="1"></label>
+            <label class="span-2">个人密钥<input name="newapi_access_token" type="password" autocomplete="new-password" placeholder="输入个人密钥"><small id="token-hint">未配置密钥</small></label>
+            <div class="span-2 settings-actions"><span>留空密钥将保留已经保存的密钥。</span><button class="primary" type="submit">保存并测试连接</button></div>
+          </form>
+        </section>
         <div id="create-user-panel" class="panel compact hidden">
           <form id="create-user-form" class="inline-form">
             <label>用户名<input name="username" required minlength="3" maxlength="32"></label>

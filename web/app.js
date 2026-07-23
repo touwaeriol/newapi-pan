@@ -75,16 +75,44 @@ $('#create-user-form').addEventListener('submit', async (event) => {
 
 async function loadAdmin() {
   try {
-    const [users, uploads] = await Promise.all([api('/api/admin/users'), api('/api/admin/uploads')])
+    const [users, uploads, settings] = await Promise.all([api('/api/admin/users'), api('/api/admin/uploads'), api('/api/admin/settings')])
     $('#total-users').textContent = users.length
     $('#active-users').textContent = users.filter((user) => user.status === 1).length
     $('#upload-count').textContent = uploads.length
     $('#users-body').innerHTML = users.map((user) => `<tr><td><b>${escapeHTML(user.username)}</b><br><small>#${user.id}</small></td><td>${user.role === 'admin' ? '管理员' : '普通用户'}</td><td><span class="status ${user.status === 1 ? 'active' : ''}">${user.status === 1 ? '启用' : '停用'}</span></td><td>${formatTime(user.created_at)}</td><td>${user.role === 'admin' ? '—' : `<button class="ghost user-toggle" data-id="${user.id}" data-status="${user.status === 1 ? 2 : 1}">${user.status === 1 ? '停用' : '启用'}</button><button class="ghost user-password" data-id="${user.id}">重置密码</button>`}</td></tr>`).join('')
     $('#uploads-list').innerHTML = uploads.length ? uploads.map((item) => `<div class="audit-item ${item.success ? 'success' : 'failed'}"><b>${escapeHTML(item.channel_name)} · ${item.success ? '成功' : '失败'}</b><span>${escapeHTML(item.username)} / 类型 ${item.channel_type} / ${formatTime(item.created_at)}</span><span>${escapeHTML(item.message)}</span></div>`).join('') : '<div class="audit-item"><span>暂无记录</span></div>'
+    renderAdminSettings(settings)
     $$('.user-toggle').forEach((button) => button.addEventListener('click', () => updateUser(button.dataset.id, { status: Number(button.dataset.status) })))
     $$('.user-password').forEach((button) => button.addEventListener('click', () => resetPassword(button.dataset.id)))
   } catch (err) { toast(err.message, true) }
 }
+
+function renderAdminSettings(settings) {
+  const form = $('#newapi-settings-form')
+  form.elements.newapi_base_url.value = settings.newapi_base_url || ''
+  form.elements.newapi_user_id.value = settings.newapi_user_id || '1'
+  form.elements.newapi_access_token.value = ''
+  form.elements.newapi_access_token.placeholder = settings.has_access_token ? '已配置，留空保持不变' : '输入个人密钥'
+  $('#token-hint').textContent = settings.has_access_token ? '已有加密密钥' : '未配置密钥'
+  $('#settings-status').textContent = settings.configured ? '已连接' : '未配置'
+  $('#settings-status').classList.toggle('active', settings.configured)
+}
+
+$('#newapi-settings-form').addEventListener('submit', async (event) => {
+  event.preventDefault()
+  const button = event.submitter
+  button.disabled = true
+  try {
+    const body = Object.fromEntries(new FormData(event.currentTarget))
+    const result = await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify(body) })
+    toast(`${result.message}，读取到 ${result.groups.length} 个分组`)
+    platform = await api('/api/platform')
+    $('#target-label').textContent = platform.newapi_base_url || 'NEW API 未配置'
+    $('#connection-badge').textContent = platform.newapi_configured ? '● New API 已连接' : '● New API 未配置'
+    $('#connection-badge').classList.toggle('ok', platform.newapi_configured)
+    renderAdminSettings(await api('/api/admin/settings'))
+  } catch (err) { toast(err.message, true) } finally { button.disabled = false }
+})
 
 async function updateUser(id, body) {
   try { await api(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }); toast('用户已更新'); await loadAdmin() } catch (err) { toast(err.message, true) }

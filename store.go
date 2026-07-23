@@ -69,6 +69,13 @@ func openStore(databaseURL string) (*store, error) {
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )`,
 		`CREATE INDEX IF NOT EXISTS uploads_created_at_idx ON uploads(created_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS app_settings (
+            id SMALLINT PRIMARY KEY CHECK(id=1),
+            newapi_base_url TEXT NOT NULL,
+            newapi_access_token_encrypted TEXT NOT NULL,
+            newapi_user_id VARCHAR(32) NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )`,
 	}
 	for _, statement := range statements {
 		if _, err := db.ExecContext(ctx, statement); err != nil {
@@ -80,6 +87,25 @@ func openStore(databaseURL string) (*store, error) {
 }
 
 func (s *store) close() error { return s.db.Close() }
+
+type storedPlatformSettings struct {
+	BaseURL              string
+	AccessTokenEncrypted string
+	UserID               string
+}
+
+func (s *store) getPlatformSettings() (storedPlatformSettings, error) {
+	var settings storedPlatformSettings
+	err := s.db.QueryRow(`SELECT newapi_base_url,newapi_access_token_encrypted,newapi_user_id FROM app_settings WHERE id=1`).Scan(&settings.BaseURL, &settings.AccessTokenEncrypted, &settings.UserID)
+	return settings, err
+}
+
+func (s *store) savePlatformSettings(settings storedPlatformSettings) error {
+	_, err := s.db.Exec(`INSERT INTO app_settings(id,newapi_base_url,newapi_access_token_encrypted,newapi_user_id,updated_at)
+        VALUES(1,$1,$2,$3,NOW())
+        ON CONFLICT(id) DO UPDATE SET newapi_base_url=EXCLUDED.newapi_base_url,newapi_access_token_encrypted=EXCLUDED.newapi_access_token_encrypted,newapi_user_id=EXCLUDED.newapi_user_id,updated_at=NOW()`, settings.BaseURL, settings.AccessTokenEncrypted, settings.UserID)
+	return err
+}
 
 func (s *store) ensureAdmin(username, password string) (string, error) {
 	var count int

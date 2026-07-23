@@ -1,0 +1,9 @@
+.settings-panel { margin-bottom: 22px; }
+.settings-form { padding: 24px; }
+.settings-actions { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12px; }
+.settings-panel .panel-title > div span { display: block; margin-top: 5px; }
+.settings-panel .status.active { background: #d9f0e7; color: var(--green); }
+
+@media (max-width: 650px) {
+  .settings-actions { align-items: stretch; flex-direction: column; gap: 14px; }
+}

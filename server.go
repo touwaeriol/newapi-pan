@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"encoding/json"
 	"errors"
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -33,6 +35,8 @@ type storeAPI interface {
 	updateUser(int64, *int, string) error
 	addUpload(context.Context, int64, string, int, bool, string)
 	listUploads() ([]map[string]any, error)
+	getPlatformSettings() (storedPlatformSettings, error)
+	savePlatformSettings(storedPlatformSettings) error
 }
 
 type contextKey string
@@ -41,7 +45,18 @@ const userContextKey contextKey = "user"
 
 func newServer(cfg config, st storeAPI) *server {
 	assets, _ := fs.Sub(webFiles, "web")
-	return &server{cfg: cfg, store: st, newAPI: newClient(cfg), web: http.FileServer(http.FS(assets))}
+	client := newClient(cfg)
+	if saved, err := st.getPlatformSettings(); err == nil {
+		accessToken, decryptErr := decryptSecret(cfg.SettingsKey, saved.AccessTokenEncrypted)
+		if decryptErr != nil {
+			log.Printf("读取 New API 配置失败: %v", decryptErr)
+		} else {
+			client.configure(saved.BaseURL, accessToken, saved.UserID)
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		log.Printf("读取平台配置失败: %v", err)
+	}
+	return &server{cfg: cfg, store: st, newAPI: client, web: http.FileServer(http.FS(assets))}
 }
 
 func (s *server) routes() http.Handler {
@@ -56,6 +71,8 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("POST /api/admin/users", s.withAdmin(s.createUser))
 	mux.HandleFunc("PATCH /api/admin/users/{id}", s.withAdmin(s.updateUser))
 	mux.HandleFunc("GET /api/admin/uploads", s.withAdmin(s.listUploads))
+	mux.HandleFunc("GET /api/admin/settings", s.withAdmin(s.getAdminSettings))
+	mux.HandleFunc("PUT /api/admin/settings", s.withAdmin(s.updateAdminSettings))
 	mux.Handle("/", s.web)
 	return s.securityHeaders(s.requestLogger(mux))
 }
@@ -173,7 +190,59 @@ func currentUser(r *http.Request) user { return r.Context().Value(userContextKey
 func (s *server) me(w http.ResponseWriter, r *http.Request) { writeOK(w, currentUser(r)) }
 
 func (s *server) platform(w http.ResponseWriter, _ *http.Request) {
-	writeOK(w, map[string]any{"newapi_configured": s.newAPI.configured(), "newapi_base_url": s.newAPI.baseURL, "anthropic_base_url": anthropicBaseURL, "channel_types": channelTypes})
+	baseURL, _, _ := s.newAPI.connection()
+	writeOK(w, map[string]any{"newapi_configured": s.newAPI.configured(), "newapi_base_url": baseURL, "anthropic_base_url": anthropicBaseURL, "channel_types": channelTypes})
+}
+
+func (s *server) getAdminSettings(w http.ResponseWriter, _ *http.Request) {
+	baseURL, accessToken, userID := s.newAPI.connection()
+	writeOK(w, map[string]any{"newapi_base_url": baseURL, "newapi_user_id": userID, "has_access_token": accessToken != "", "configured": baseURL != "" && accessToken != "" && userID != ""})
+}
+
+func (s *server) updateAdminSettings(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		BaseURL     string `json:"newapi_base_url"`
+		AccessToken string `json:"newapi_access_token"`
+		UserID      string `json:"newapi_user_id"`
+	}
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	body.BaseURL = strings.TrimRight(strings.TrimSpace(body.BaseURL), "/")
+	body.UserID = strings.TrimSpace(body.UserID)
+	body.AccessToken = strings.TrimSpace(body.AccessToken)
+	_, currentToken, _ := s.newAPI.connection()
+	if body.AccessToken == "" {
+		body.AccessToken = currentToken
+	}
+	parsedURL, err := url.ParseRequestURI(body.BaseURL)
+	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") || parsedURL.Host == "" {
+		writeError(w, http.StatusBadRequest, "New API 地址必须是有效的 HTTP(S) URL")
+		return
+	}
+	userID, err := strconv.Atoi(body.UserID)
+	if err != nil || userID < 1 || body.AccessToken == "" {
+		writeError(w, http.StatusBadRequest, "个人密钥和有效用户 ID 均为必填项")
+		return
+	}
+	testClient := newClient(config{NewAPIBaseURL: body.BaseURL, NewAPIAccessToken: body.AccessToken, NewAPIUserID: body.UserID})
+	metadata, err := testClient.metadata(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "连接验证失败: "+err.Error())
+		return
+	}
+	encryptedToken, err := encryptSecret(s.cfg.SettingsKey, body.AccessToken)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "加密个人密钥失败")
+		return
+	}
+	if err := s.store.savePlatformSettings(storedPlatformSettings{BaseURL: body.BaseURL, AccessTokenEncrypted: encryptedToken, UserID: body.UserID}); err != nil {
+		writeError(w, http.StatusInternalServerError, "保存配置失败")
+		return
+	}
+	s.newAPI.configure(body.BaseURL, body.AccessToken, body.UserID)
+	writeOK(w, map[string]any{"message": "配置已保存并验证", "groups": metadata["groups"], "models": metadata["models"]})
 }
 
 func (s *server) metadata(w http.ResponseWriter, r *http.Request) {

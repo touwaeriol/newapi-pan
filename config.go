@@ -18,6 +18,7 @@ type config struct {
 	AdminPassword     string
 	SessionTTL        time.Duration
 	CookieSecure      bool
+	SettingsKey       []byte
 }
 
 func loadConfig() (config, error) {
@@ -36,6 +37,11 @@ func loadConfig() (config, error) {
 		SessionTTL:        time.Duration(ttlHours) * time.Hour,
 		CookieSecure:      strings.EqualFold(env("COOKIE_SECURE", "false"), "true"),
 	}
+	settingsKey, err := decodeSettingsKey(strings.TrimSpace(os.Getenv("SETTINGS_ENCRYPTION_KEY")))
+	if err != nil {
+		return config{}, err
+	}
+	cfg.SettingsKey = settingsKey
 	if cfg.NewAPIBaseURL != "" && !strings.HasPrefix(cfg.NewAPIBaseURL, "http://") && !strings.HasPrefix(cfg.NewAPIBaseURL, "https://") {
 		return config{}, fmt.Errorf("NEWAPI_BASE_URL 必须以 http:// 或 https:// 开头")
 	}
