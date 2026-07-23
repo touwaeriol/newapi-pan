@@ -63,13 +63,21 @@ $('#logout-button').addEventListener('click', async () => {
 
 $('#show-create-user').addEventListener('click', () => $('#create-user-panel').classList.remove('hidden'))
 $('#cancel-create-user').addEventListener('click', () => $('#create-user-panel').classList.add('hidden'))
+$('#generate-user-password').addEventListener('click', async () => {
+  const password = randomPassword()
+  $('#create-user-form').elements.password.value = password
+  await copyText(password)
+  toast('随机密码已生成并复制')
+})
 $('#create-user-form').addEventListener('submit', async (event) => {
   event.preventDefault()
   const button = event.submitter
   button.disabled = true
   try {
-    await api('/api/admin/users', { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))) })
-    event.currentTarget.reset(); $('#create-user-panel').classList.add('hidden'); toast('用户已创建'); await loadAdmin()
+    const formData = Object.fromEntries(new FormData(event.currentTarget))
+    await api('/api/admin/users', { method: 'POST', body: JSON.stringify(formData) })
+    showCredential(formData.username, formData.password)
+    event.currentTarget.reset(); $('#create-user-panel').classList.add('hidden'); toast('用户已创建，可复制凭据'); await loadAdmin()
   } catch (err) { toast(err.message, true) } finally { button.disabled = false }
 })
 
@@ -79,18 +87,17 @@ async function loadAdmin() {
     $('#total-users').textContent = users.length
     $('#active-users').textContent = users.filter((user) => user.status === 1).length
     $('#upload-count').textContent = uploads.length
-    $('#users-body').innerHTML = users.map((user) => `<tr><td><b>${escapeHTML(user.username)}</b><br><small>#${user.id}</small></td><td>${user.role === 'admin' ? '管理员' : '普通用户'}</td><td><span class="status ${user.status === 1 ? 'active' : ''}">${user.status === 1 ? '启用' : '停用'}</span></td><td>${formatTime(user.created_at)}</td><td>${user.role === 'admin' ? '—' : `<button class="ghost user-toggle" data-id="${user.id}" data-status="${user.status === 1 ? 2 : 1}">${user.status === 1 ? '停用' : '启用'}</button><button class="ghost user-password" data-id="${user.id}">重置密码</button>`}</td></tr>`).join('')
+    $('#users-body').innerHTML = users.map((user) => `<tr><td><b>${escapeHTML(user.username)}</b><br><small>#${user.id}</small></td><td>${user.role === 'admin' ? '管理员' : '普通用户'}</td><td><span class="status ${user.status === 1 ? 'active' : ''}">${user.status === 1 ? '启用' : '停用'}</span></td><td>${formatTime(user.created_at)}</td><td>${user.role === 'admin' ? '—' : `<button class="ghost user-toggle" data-id="${user.id}" data-status="${user.status === 1 ? 2 : 1}">${user.status === 1 ? '停用' : '启用'}</button><button class="ghost user-password" data-id="${user.id}" data-username="${escapeAttr(user.username)}">重置并复制</button>`}</td></tr>`).join('')
     $('#uploads-list').innerHTML = uploads.length ? uploads.map((item) => `<div class="audit-item ${item.success ? 'success' : 'failed'}"><b>${escapeHTML(item.channel_name)} · ${item.success ? '成功' : '失败'}</b><span>${escapeHTML(item.username)} / 类型 ${item.channel_type} / ${formatTime(item.created_at)}</span><span>${escapeHTML(item.message)}</span></div>`).join('') : '<div class="audit-item"><span>暂无记录</span></div>'
     renderAdminSettings(settings)
     $$('.user-toggle').forEach((button) => button.addEventListener('click', () => updateUser(button.dataset.id, { status: Number(button.dataset.status) })))
-    $$('.user-password').forEach((button) => button.addEventListener('click', () => resetPassword(button.dataset.id)))
+    $$('.user-password').forEach((button) => button.addEventListener('click', () => resetPassword(button.dataset.id, button.dataset.username)))
   } catch (err) { toast(err.message, true) }
 }
 
 function renderAdminSettings(settings) {
   const form = $('#newapi-settings-form')
   form.elements.newapi_base_url.value = settings.newapi_base_url || ''
-  form.elements.newapi_user_id.value = settings.newapi_user_id || '1'
   form.elements.newapi_access_token.value = ''
   form.elements.newapi_access_token.placeholder = settings.has_access_token ? '已配置，留空保持不变' : '输入个人密钥'
   $('#token-hint').textContent = settings.has_access_token ? '已有加密密钥' : '未配置密钥'
@@ -118,10 +125,15 @@ async function updateUser(id, body) {
   try { await api(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }); toast('用户已更新'); await loadAdmin() } catch (err) { toast(err.message, true) }
 }
 
-async function resetPassword(id) {
-  const password = prompt('输入新密码（至少 8 位）')
-  if (!password) return
-  await updateUser(id, { password })
+async function resetPassword(id, username) {
+  if (!confirm(`确定重置 ${username} 的密码？旧密码将立即失效。`)) return
+  const password = randomPassword()
+  try {
+    await api(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify({ password }) })
+    showCredential(username, password)
+    toast('密码已重置，可立即复制')
+    await loadAdmin()
+  } catch (err) { toast(err.message, true) }
 }
 
 function setupChannelTypes() {
@@ -179,6 +191,44 @@ $('#channel-form').addEventListener('submit', async (event) => {
     toast(`${result.message}，Base URL：${result.base_url || '空'}`)
     event.currentTarget.reset(); updateBasePolicy(); await loadMetadata()
   } catch (err) { toast(err.message, true) } finally { button.disabled = false }
+})
+
+function randomPassword(length = 20) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789-_'
+  const random = new Uint32Array(length)
+  crypto.getRandomValues(random)
+  return [...random].map((value) => alphabet[value % alphabet.length]).join('')
+}
+
+async function copyText(value) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value)
+    return
+  }
+  const input = document.createElement('textarea')
+  input.value = value
+  input.style.position = 'fixed'
+  input.style.opacity = '0'
+  document.body.appendChild(input)
+  input.select()
+  document.execCommand('copy')
+  input.remove()
+}
+
+function showCredential(username, password) {
+  $('#credential-username').value = username
+  $('#credential-password').value = password
+  $('#credential-dialog').showModal()
+}
+
+$('#close-credential-dialog').addEventListener('click', () => $('#credential-dialog').close())
+$('#copy-password').addEventListener('click', async () => {
+  await copyText($('#credential-password').value)
+  toast('密码已复制')
+})
+$('#copy-credential').addEventListener('click', async () => {
+  await copyText(`用户名：${$('#credential-username').value}\n密码：${$('#credential-password').value}`)
+  toast('账号和密码已复制')
 })
 
 function escapeHTML(value) { const node = document.createElement('div'); node.textContent = String(value ?? ''); return node.innerHTML }

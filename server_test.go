@@ -179,7 +179,7 @@ func TestAdminCanSaveEncryptedNewAPISettings(t *testing.T) {
 	}
 	res.Body.Close()
 
-	body := `{"newapi_base_url":"` + upstream.URL + `","newapi_access_token":"secret-token","newapi_user_id":"1"}`
+	body := `{"newapi_base_url":"` + upstream.URL + `","newapi_access_token":"secret-token"}`
 	req, err := http.NewRequest(http.MethodPut, app.URL+"/api/admin/settings", strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
@@ -195,6 +195,9 @@ func TestAdminCanSaveEncryptedNewAPISettings(t *testing.T) {
 	}
 	if st.saved == nil || st.saved.AccessTokenEncrypted == "secret-token" {
 		t.Fatal("access token was not encrypted")
+	}
+	if st.saved.UserID != "1" {
+		t.Fatalf("internal New API user id = %q, want 1", st.saved.UserID)
 	}
 	plaintext, err := decryptSecret(cfg.SettingsKey, st.saved.AccessTokenEncrypted)
 	if err != nil || plaintext != "secret-token" {

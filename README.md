@@ -28,7 +28,8 @@ Docker Desktop 使用 7890 代理时，将代理地址写为 `http://host.docker
 - 非 Anthropic 渠道的 `base_url` 在服务端强制置空。
 - Anthropic（类型 14）的 `base_url` 固定为 `https://openrouter.ai/api`。
 - New API 个人密钥仅在服务端使用，不下发浏览器、不写入审计，也不会提交到代码仓库。
-- 管理员可在网页配置 New API 地址、个人密钥和用户 ID；个人密钥使用环境密钥经 AES-256-GCM 加密后保存，页面永不回显明文。
+- 管理员可在网页配置 New API 地址和个人密钥；用户 ID 由服务端固定配置（默认 1），个人密钥使用环境密钥经 AES-256-GCM 加密后保存。
+- 用户密码不可逆存储；创建或重置时会显示一次，并支持一键复制密码或完整凭据。
 - `setting`、`settings`、映射/覆盖字段及“额外渠道 JSON”覆盖 New API 添加渠道的完整配置能力。
 - 平台使用独立 PostgreSQL 模式和专属数据库用户，`database/sql` 连接池最大连接数与最大空闲连接数均固定为 5。
 - 平台密码使用独立随机盐与 120,000 轮 SHA-256 派生存储。

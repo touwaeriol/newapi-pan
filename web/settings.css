@@ -3,6 +3,16 @@
 .settings-actions { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12px; }
 .settings-panel .panel-title > div span { display: block; margin-top: 5px; }
 .settings-panel .status.active { background: #d9f0e7; color: var(--green); }
+.password-input-row { display: flex; gap: 8px; }
+.password-input-row .ghost { flex: 0 0 auto; white-space: nowrap; }
+.credential-dialog { width: min(520px, calc(100vw - 32px)); border: 0; border-radius: 7px; padding: 28px; box-shadow: 0 28px 90px rgba(0, 0, 0, .28); }
+.credential-dialog::backdrop { background: rgba(10, 15, 17, .6); backdrop-filter: blur(4px); }
+.credential-dialog .dialog-head, .credential-dialog .dialog-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.credential-dialog .dialog-head { margin-bottom: 22px; }
+.credential-dialog .dialog-head h2 { margin: 7px 0 0; font-family: Georgia, serif; }
+.credential-dialog label { display: flex; flex-direction: column; gap: 7px; margin: 14px 0; font-size: 12px; font-weight: 700; }
+.credential-dialog .dialog-actions { justify-content: flex-end; margin: 22px 0 14px; }
+.credential-dialog > small { color: var(--muted); }
 
 @media (max-width: 650px) {
   .settings-actions { align-items: stretch; flex-direction: column; gap: 14px; }

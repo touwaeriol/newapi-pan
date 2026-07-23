@@ -196,37 +196,40 @@ func (s *server) platform(w http.ResponseWriter, _ *http.Request) {
 
 func (s *server) getAdminSettings(w http.ResponseWriter, _ *http.Request) {
 	baseURL, accessToken, userID := s.newAPI.connection()
-	writeOK(w, map[string]any{"newapi_base_url": baseURL, "newapi_user_id": userID, "has_access_token": accessToken != "", "configured": baseURL != "" && accessToken != "" && userID != ""})
+	writeOK(w, map[string]any{"newapi_base_url": baseURL, "has_access_token": accessToken != "", "configured": baseURL != "" && accessToken != "" && userID != ""})
 }
 
 func (s *server) updateAdminSettings(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		BaseURL     string `json:"newapi_base_url"`
 		AccessToken string `json:"newapi_access_token"`
-		UserID      string `json:"newapi_user_id"`
 	}
 	if err := decodeJSON(w, r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	body.BaseURL = strings.TrimRight(strings.TrimSpace(body.BaseURL), "/")
-	body.UserID = strings.TrimSpace(body.UserID)
 	body.AccessToken = strings.TrimSpace(body.AccessToken)
-	_, currentToken, _ := s.newAPI.connection()
+	_, currentToken, userID := s.newAPI.connection()
 	if body.AccessToken == "" {
 		body.AccessToken = currentToken
+	}
+	if userID == "" {
+		userID = strings.TrimSpace(s.cfg.NewAPIUserID)
+	}
+	if userID == "" {
+		userID = "1"
 	}
 	parsedURL, err := url.ParseRequestURI(body.BaseURL)
 	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") || parsedURL.Host == "" {
 		writeError(w, http.StatusBadRequest, "New API 地址必须是有效的 HTTP(S) URL")
 		return
 	}
-	userID, err := strconv.Atoi(body.UserID)
-	if err != nil || userID < 1 || body.AccessToken == "" {
-		writeError(w, http.StatusBadRequest, "个人密钥和有效用户 ID 均为必填项")
+	if body.AccessToken == "" {
+		writeError(w, http.StatusBadRequest, "个人密钥为必填项")
 		return
 	}
-	testClient := newClient(config{NewAPIBaseURL: body.BaseURL, NewAPIAccessToken: body.AccessToken, NewAPIUserID: body.UserID})
+	testClient := newClient(config{NewAPIBaseURL: body.BaseURL, NewAPIAccessToken: body.AccessToken, NewAPIUserID: userID})
 	metadata, err := testClient.metadata(r.Context())
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "连接验证失败: "+err.Error())
@@ -237,11 +240,11 @@ func (s *server) updateAdminSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "加密个人密钥失败")
 		return
 	}
-	if err := s.store.savePlatformSettings(storedPlatformSettings{BaseURL: body.BaseURL, AccessTokenEncrypted: encryptedToken, UserID: body.UserID}); err != nil {
+	if err := s.store.savePlatformSettings(storedPlatformSettings{BaseURL: body.BaseURL, AccessTokenEncrypted: encryptedToken, UserID: userID}); err != nil {
 		writeError(w, http.StatusInternalServerError, "保存配置失败")
 		return
 	}
-	s.newAPI.configure(body.BaseURL, body.AccessToken, body.UserID)
+	s.newAPI.configure(body.BaseURL, body.AccessToken, userID)
 	writeOK(w, map[string]any{"message": "配置已保存并验证", "groups": metadata["groups"], "models": metadata["models"]})
 }
 
