@@ -1,0 +1,21 @@
+services:
+  newapi-upload:
+    container_name: newapi-pan
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "3012:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - codingplus
+
+networks:
+  codingplus:
+    external: true
+    name: newapi-codingplus_newapi-codingplus-network

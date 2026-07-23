@@ -1,0 +1,4 @@
+.env
+newapi-upload.exe
+newapi-pan-linux-amd64
+*.log

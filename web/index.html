@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>渠道上传平台</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <main>
+    <section id="login-view" class="login-shell">
+      <div class="brand-panel">
+        <span class="eyebrow">NEW API CHANNEL PORTAL</span>
+        <h1>把渠道配置，<br><em>安全地送达。</em></h1>
+        <p>统一管理平台账号，普通用户只拥有渠道创建能力。个人密钥始终保留在服务端。</p>
+        <div class="feature-row"><span>01</span> 权限隔离</div>
+        <div class="feature-row"><span>02</span> 完整参数</div>
+        <div class="feature-row"><span>03</span> 全程审计</div>
+      </div>
+      <form id="login-form" class="login-card">
+        <div><span class="pill">CONTROL DESK</span><h2>登录平台</h2><p>使用管理员创建的平台账号</p></div>
+        <label>用户名<input name="username" autocomplete="username" required minlength="3"></label>
+        <label>密码<input name="password" type="password" autocomplete="current-password" required minlength="8"></label>
+        <button class="primary" type="submit">进入控制台 <span>→</span></button>
+      </form>
+    </section>
+
+    <section id="app-view" class="app-shell hidden">
+      <header>
+        <div class="logo"><span>N</span><div>渠道上传平台<small id="target-label">NEW API</small></div></div>
+        <div class="header-actions"><span id="connection-badge" class="badge"></span><span id="user-label"></span><button id="logout-button" class="ghost">退出</button></div>
+      </header>
+
+      <div id="admin-view" class="hidden content">
+        <div class="hero"><div><span class="eyebrow">ADMINISTRATION</span><h1>平台用户</h1><p>创建账号、停用访问、重置密码，并查看渠道创建审计。</p></div><button id="show-create-user" class="primary">＋ 创建用户</button></div>
+        <div id="create-user-panel" class="panel compact hidden">
+          <form id="create-user-form" class="inline-form">
+            <label>用户名<input name="username" required minlength="3" maxlength="32"></label>
+            <label>初始密码<input name="password" type="password" required minlength="8" maxlength="128"></label>
+            <button class="primary" type="submit">创建</button><button id="cancel-create-user" class="ghost" type="button">取消</button>
+          </form>
+        </div>
+        <div class="stats"><div><b id="total-users">0</b><span>全部账号</span></div><div><b id="active-users">0</b><span>启用账号</span></div><div><b id="upload-count">0</b><span>近期创建</span></div></div>
+        <div class="grid-admin">
+          <section class="panel"><div class="panel-title"><h2>账号列表</h2><span>仅管理员可见</span></div><div class="table-wrap"><table><thead><tr><th>用户</th><th>角色</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody id="users-body"></tbody></table></div></section>
+          <section class="panel"><div class="panel-title"><h2>创建审计</h2><span>最近 200 条</span></div><div id="uploads-list" class="audit-list"></div></section>
+        </div>
+      </div>
+
+      <div id="user-view" class="hidden content">
+        <div class="hero"><div><span class="eyebrow">CREATE ONLY WORKSPACE</span><h1>创建新渠道</h1><p>填写渠道密钥与配置，平台将直接提交至 New API。</p></div><div class="policy-card"><span>BASE URL POLICY</span><b id="base-policy">强制留空</b><small>Anthropic 类型固定使用 openrouter.ai/api</small></div></div>
+        <form id="channel-form">
+          <section class="panel form-section">
+            <div class="section-number">01</div><div class="section-head"><h2>基础信息</h2><p>名称、类型、密钥与创建模式</p></div>
+            <div class="form-grid">
+              <label>渠道名称 *<input name="name" required maxlength="120" placeholder="例如：供应商-A"></label>
+              <label>渠道类型 *<select name="type" id="channel-type" required></select></label>
+              <label class="span-2">渠道密钥 *<textarea name="key" required rows="4" placeholder="单密钥，或每行一个密钥"></textarea><small>密钥不会写入平台审计记录</small></label>
+              <label>创建模式<select name="mode" id="mode"><option value="single">单渠道</option><option value="batch">批量独立渠道</option><option value="multi_to_single">聚合多密钥渠道</option></select></label>
+              <label>多密钥策略<select name="multi_key_mode"><option value="random">随机</option><option value="polling">轮询</option></select></label>
+              <label class="check"><input name="batch_prefix" type="checkbox"><span>批量时用密钥前缀补充渠道名</span></label>
+              <div class="readonly-field"><span>最终 Base URL</span><b id="computed-base-url">空</b></div>
+            </div>
+          </section>
+
+          <section class="panel form-section">
+            <div class="section-number">02</div><div class="section-head"><h2>模型与分组</h2><p>数据实时读取自 New API</p></div>
+            <div class="form-grid">
+              <label class="span-2">模型 *<textarea name="models" id="models" required rows="3" placeholder="gpt-4o,claude-3-5-sonnet"></textarea><small>多个模型用英文逗号分隔</small></label>
+              <fieldset class="span-2"><legend>分组 *</legend><div id="groups" class="choice-grid"><span class="muted">正在读取分组…</span></div></fieldset>
+              <label>测试模型<input name="test_model" list="model-options" placeholder="可选"></label><datalist id="model-options"></datalist>
+              <label>OpenAI Organization<input name="openai_organization" placeholder="可选"></label>
+            </div>
+          </section>
+
+          <section class="panel form-section">
+            <div class="section-number">03</div><div class="section-head"><h2>调度设置</h2><p>与 New API 添加渠道字段保持一致</p></div>
+            <div class="form-grid four">
+              <label>状态<select name="status"><option value="1">启用</option><option value="2">禁用</option></select></label>
+              <label>优先级<input name="priority" type="number" value="0"></label>
+              <label>权重<input name="weight" type="number" min="0" value="0"></label>
+              <label>自动禁用<select name="auto_ban"><option value="1">开启</option><option value="0">关闭</option></select></label>
+              <label>标签<input name="tag" maxlength="64"></label>
+              <label class="span-3">备注<input name="remark" maxlength="255"></label>
+            </div>
+          </section>
+
+          <section class="panel form-section advanced">
+            <div class="section-number">04</div><div class="section-head"><h2>高级配置</h2><p>所有 JSON 字段均原样传给 New API</p></div>
+            <details open><summary>映射与请求改写</summary><div class="form-grid">
+              <label>模型映射 JSON<textarea name="model_mapping" rows="5" placeholder='{"gpt-4o":"upstream-model"}'></textarea></label>
+              <label>状态码映射 JSON<textarea name="status_code_mapping" rows="5" placeholder='{"429":500}'></textarea></label>
+              <label>参数覆盖 param_override<textarea name="param_override" rows="5" placeholder="{}"></textarea></label>
+              <label>请求头覆盖 header_override<textarea name="header_override" rows="5" placeholder="{}"></textarea></label>
+            </div></details>
+            <details><summary>渠道 setting 与 settings</summary><div class="form-grid">
+              <label>setting JSON<textarea name="setting" rows="8" placeholder='{"force_format":false,"retry_429_enabled":false}'></textarea><small>代理、429 重试、配额与速率限制等</small></label>
+              <label>settings JSON<textarea name="settings" rows="8" placeholder='{"claude_beta_query":false,"aws_key_type":"ak_sk"}'></textarea><small>Azure、Vertex、AWS、Anthropic 等提供商设置</small></label>
+              <label class="span-2">other（原始字符串）<textarea name="other" rows="3"></textarea></label>
+            </div></details>
+            <details><summary>完整字段覆盖</summary><label>额外渠道 JSON 对象<textarea name="extra_json" rows="9" placeholder='{"channel_info":{"is_multi_key":false}}'></textarea><small>用于承载当前或未来版本的任意 New API 渠道字段；Base URL 与服务端字段仍由平台强制控制。</small></label></details>
+          </section>
+          <div class="submit-bar"><div><b>仅执行创建操作</b><span>平台不向普通用户提供渠道查询、修改或删除接口</span></div><button class="primary large" type="submit">提交并创建渠道 <span>→</span></button></div>
+        </form>
+      </div>
+    </section>
+  </main>
+  <script src="/app.js" defer></script>
+</body>
+</html>
