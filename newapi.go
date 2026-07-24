@@ -125,9 +125,14 @@ func normalizeChannel(channel map[string]any) (string, int, error) {
 	}
 	channel["name"] = name
 	channel["type"] = typeNumber
+	requestedBaseURL, _ := channel["base_url"].(string)
+	requestedBaseURL = strings.TrimRight(strings.TrimSpace(requestedBaseURL), "/")
 	channel["base_url"] = ""
 	if typeNumber == 14 {
-		channel["base_url"] = anthropicBaseURL
+		if requestedBaseURL != "" && requestedBaseURL != anthropicBaseURL {
+			return "", 0, errors.New("Anthropic Base URL 只允许为空或 https://openrouter.ai/api")
+		}
+		channel["base_url"] = requestedBaseURL
 	}
 	defaults := map[string]any{"status": 1, "priority": 0, "weight": 0, "auto_ban": 1}
 	for key, value := range defaults {

@@ -58,7 +58,7 @@
       </div>
 
       <div id="user-view" class="hidden content">
-        <div class="hero"><div><span class="eyebrow">CREATE ONLY WORKSPACE</span><h1>创建新渠道</h1><p>填写渠道密钥与配置，平台将直接提交至 New API。</p></div><div class="policy-card"><span>BASE URL POLICY</span><b id="base-policy">强制留空</b><small>Anthropic 类型固定使用 openrouter.ai/api</small></div></div>
+        <div class="hero"><div><span class="eyebrow">CREATE ONLY WORKSPACE</span><h1>创建新渠道</h1><p>填写渠道密钥与配置，平台将直接提交至 New API。</p></div><div class="policy-card"><span>BASE URL POLICY</span><b id="base-policy">强制留空</b><small>Anthropic 可选择留空或 openrouter.ai/api</small></div></div>
         <form id="channel-form">
           <section class="panel form-section">
             <div class="section-number">01</div><div class="section-head"><h2>基础信息</h2><p>名称、类型、密钥与创建模式</p></div>
@@ -69,7 +69,7 @@
               <label>创建模式<select name="mode" id="mode"><option value="single">单渠道</option><option value="batch">批量独立渠道</option><option value="multi_to_single">聚合多密钥渠道</option></select></label>
               <label>多密钥策略<select name="multi_key_mode"><option value="random">随机</option><option value="polling">轮询</option></select></label>
               <label class="check"><input name="batch_prefix" type="checkbox"><span>批量时用密钥前缀补充渠道名</span></label>
-              <div class="readonly-field"><span>最终 Base URL</span><b id="computed-base-url">空</b></div>
+              <label>Anthropic Base URL<select name="base_url" id="anthropic-base-url" disabled><option value="">空</option><option value="https://openrouter.ai/api">https://openrouter.ai/api</option></select></label>
             </div>
           </section>
 

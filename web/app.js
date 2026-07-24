@@ -144,8 +144,10 @@ function setupChannelTypes() {
 $('#channel-type').addEventListener('change', updateBasePolicy)
 function updateBasePolicy() {
   const anthropic = Number($('#channel-type').value) === 14
-  $('#computed-base-url').textContent = anthropic ? platform.anthropic_base_url : '空'
-  $('#base-policy').textContent = anthropic ? '固定 OpenRouter 地址' : '强制留空'
+  const baseURLSelect = $('#anthropic-base-url')
+  baseURLSelect.disabled = !anthropic
+  if (!anthropic) baseURLSelect.value = ''
+  $('#base-policy').textContent = anthropic ? '可选空或 OpenRouter' : '强制留空'
 }
 
 async function loadMetadata() {
@@ -174,7 +176,7 @@ $('#channel-form').addEventListener('submit', async (event) => {
     if (!groups.length) throw new Error('至少选择一个分组')
     const channel = {
       name: form.get('name').trim(), type: Number(form.get('type')), key: form.get('key').trim(), models: form.get('models').trim(), group: groups.join(','),
-      status: Number(form.get('status')), priority: Number(form.get('priority') || 0), weight: Number(form.get('weight') || 0), auto_ban: Number(form.get('auto_ban')),
+      status: Number(form.get('status')), priority: Number(form.get('priority') || 0), weight: Number(form.get('weight') || 0), auto_ban: Number(form.get('auto_ban')), base_url: String(form.get('base_url') || ''),
     }
     for (const field of ['test_model', 'openai_organization', 'tag', 'remark', 'other']) {
       const value = String(form.get(field) || '').trim(); if (value) channel[field] = value

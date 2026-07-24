@@ -26,7 +26,7 @@ Docker Desktop 使用 7890 代理时，将代理地址写为 `http://host.docker
 ## 行为约束
 
 - 非 Anthropic 渠道的 `base_url` 在服务端强制置空。
-- Anthropic（类型 14）的 `base_url` 固定为 `https://openrouter.ai/api`。
+- Anthropic（类型 14）的 `base_url` 仅允许为空或 `https://openrouter.ai/api`。
 - New API 个人密钥仅在服务端使用，不下发浏览器、不写入审计，也不会提交到代码仓库。
 - 管理员可在网页配置 New API 地址和个人密钥；用户 ID 由服务端固定配置（默认 1），个人密钥使用环境密钥经 AES-256-GCM 加密后保存。
 - 用户密码不可逆存储；创建或重置时会显示一次，并支持一键复制密码或完整凭据。

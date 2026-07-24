@@ -74,15 +74,25 @@ func TestNormalizeChannelEnforcesBaseURLPolicy(t *testing.T) {
 	tests := []struct {
 		name        string
 		channelType int
+		baseURL     string
 		wantBaseURL string
+		wantError   bool
 	}{
-		{name: "OpenAI must be empty", channelType: 1, wantBaseURL: ""},
-		{name: "Anthropic uses OpenRouter", channelType: 14, wantBaseURL: anthropicBaseURL},
+		{name: "OpenAI must be empty", channelType: 1, baseURL: "https://attacker.invalid", wantBaseURL: ""},
+		{name: "Anthropic may be empty", channelType: 14, baseURL: "", wantBaseURL: ""},
+		{name: "Anthropic may use OpenRouter", channelType: 14, baseURL: anthropicBaseURL, wantBaseURL: anthropicBaseURL},
+		{name: "Anthropic rejects other URL", channelType: 14, baseURL: "https://attacker.invalid", wantError: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			channel := map[string]any{"name": "test", "type": test.channelType, "key": "secret", "models": "model", "group": "default", "base_url": "https://attacker.invalid", "id": 99}
+			channel := map[string]any{"name": "test", "type": test.channelType, "key": "secret", "models": "model", "group": "default", "base_url": test.baseURL, "id": 99}
 			name, channelType, err := normalizeChannel(channel)
+			if test.wantError {
+				if err == nil {
+					t.Fatal("normalizeChannel() expected error")
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("normalizeChannel() error = %v", err)
 			}
@@ -131,7 +141,7 @@ func TestUserCanCreateChannelButCannotManageUsers(t *testing.T) {
 	}
 	res.Body.Close()
 
-	createBody := `{"mode":"single","channel":{"name":"anthropic-test","type":14,"key":"sk-upstream","models":"claude-3-5-sonnet","group":"default","base_url":"https://invalid.example"}}`
+	createBody := `{"mode":"single","channel":{"name":"anthropic-test","type":14,"key":"sk-upstream","models":"claude-3-5-sonnet","group":"default","base_url":"https://openrouter.ai/api"}}`
 	res, err = client.Post(app.URL+"/api/channels", "application/json", strings.NewReader(createBody))
 	if err != nil {
 		t.Fatal(err)
