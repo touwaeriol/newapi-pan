@@ -70,7 +70,7 @@
               <label>创建模式<select name="mode" id="mode"><option value="single">单渠道</option><option value="batch">批量独立渠道</option><option value="multi_to_single">聚合多密钥渠道</option></select></label>
               <label>多密钥策略<select name="multi_key_mode"><option value="random">随机</option><option value="polling">轮询</option></select></label>
               <label class="check"><input name="batch_prefix" type="checkbox"><span>批量时用密钥前缀补充渠道名</span></label>
-              <label>Anthropic Base URL<select name="base_url" id="anthropic-base-url" disabled><option value="">空</option><option value="https://openrouter.ai/api">https://openrouter.ai/api</option></select></label>
+              <label>Base URL<select name="base_url" id="channel-base-url" disabled><option value="">空</option><option value="https://openrouter.ai/api">https://openrouter.ai/api</option></select><small>仅 Anthropic 类型允许选择 OpenRouter 端点</small></label>
               <div id="provider-fields" class="span-2 provider-fields">
                 <label class="provider-field hidden" data-types="3">Responses API 版本<input name="azure_responses_version" placeholder="例如：preview"></label>
                 <label class="provider-field hidden" data-types="18,21,39,49"><span id="provider-other-label">附加配置</span><input name="other" id="provider-other"></label>

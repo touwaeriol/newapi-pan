@@ -146,7 +146,7 @@ $('#channel-type').addEventListener('change', updateBasePolicy)
 function updateBasePolicy() {
   const channelType = Number($('#channel-type').value)
   const anthropic = channelType === 14
-  const baseURLSelect = $('#anthropic-base-url')
+  const baseURLSelect = $('#channel-base-url')
   baseURLSelect.disabled = !anthropic
   if (!anthropic) baseURLSelect.value = ''
   $('#base-policy').textContent = anthropic ? '可选空或 OpenRouter' : '强制留空'
