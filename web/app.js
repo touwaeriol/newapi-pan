@@ -2,6 +2,7 @@ const $ = (selector) => document.querySelector(selector)
 const $$ = (selector) => [...document.querySelectorAll(selector)]
 let currentUser = null
 let platform = null
+let channelMetadata = { groups: [], models: [], all_models: [], prefill_groups: [] }
 
 async function api(path, options = {}) {
   const res = await fetch(path, { credentials: 'same-origin', ...options, headers: { 'Content-Type': 'application/json', ...(options.headers || {}) } })
@@ -143,27 +144,101 @@ function setupChannelTypes() {
 
 $('#channel-type').addEventListener('change', updateBasePolicy)
 function updateBasePolicy() {
-  const anthropic = Number($('#channel-type').value) === 14
+  const channelType = Number($('#channel-type').value)
+  const anthropic = channelType === 14
   const baseURLSelect = $('#anthropic-base-url')
   baseURLSelect.disabled = !anthropic
   if (!anthropic) baseURLSelect.value = ''
   $('#base-policy').textContent = anthropic ? '可选空或 OpenRouter' : '强制留空'
+  $$('.provider-field[data-types]').forEach((field) => {
+    const types = field.dataset.types.split(',').map(Number)
+    field.classList.toggle('hidden', !types.includes(channelType))
+  })
+  $('#openai-organization-field').classList.toggle('hidden', channelType !== 1)
+  const providerLabels = { 18: '模型版本 *', 21: '知识库 ID *', 39: 'Cloudflare Account ID *', 49: 'Coze Agent ID *' }
+  $('#provider-other-label').textContent = providerLabels[channelType] || '附加配置'
 }
 
 async function loadMetadata() {
   if (!platform.newapi_configured) { $('#groups').innerHTML = '<span class="muted">管理员尚未配置 New API 连接</span>'; return }
   try {
     const metadata = await api('/api/newapi/metadata')
+    channelMetadata = metadata
     $('#groups').innerHTML = metadata.groups.length ? metadata.groups.map((group, index) => `<label><input type="checkbox" name="group" value="${escapeAttr(group)}" ${index === 0 ? 'checked' : ''}><span>${escapeHTML(group)}</span></label>`).join('') : '<span class="muted">New API 暂无分组</span>'
-    $('#model-options').innerHTML = (metadata.models || []).map((model) => `<option value="${escapeAttr(model)}"></option>`).join('')
+    const allModels = normalizeModelList(metadata.all_models?.length ? metadata.all_models : metadata.models)
+    $('#model-options').innerHTML = allModels.map((model) => `<option value="${escapeAttr(model)}"></option>`).join('')
+    $('#prefill-groups').innerHTML = (metadata.prefill_groups || []).map((group) => `<button class="ghost prefill-models" type="button" data-items="${escapeAttr(JSON.stringify(group.items))}">+ ${escapeHTML(group.name)}</button>`).join('')
+    $$('.prefill-models').forEach((button) => button.addEventListener('click', () => appendModels(parsePrefillItems(button.dataset.items))))
   } catch (err) { $('#groups').innerHTML = `<span class="muted">${escapeHTML(err.message)}</span>`; toast(err.message, true) }
 }
+
+function normalizeModelList(items) {
+  return [...new Set((items || []).map((item) => typeof item === 'string' ? item : item?.id).filter(Boolean))]
+}
+
+function parsePrefillItems(raw) {
+  try {
+    const value = JSON.parse(raw)
+    const items = typeof value === 'string' ? JSON.parse(value) : value
+    return Array.isArray(items) ? items : []
+  } catch { return [] }
+}
+
+function appendModels(models, replace = false) {
+  const current = replace ? [] : $('#models').value.split(',')
+  $('#models').value = [...new Set([...current, ...models].map((item) => String(item).trim()).filter(Boolean))].join(',')
+}
+
+$('#fill-all-models').addEventListener('click', () => appendModels(normalizeModelList(channelMetadata.models), true))
+$('#fill-related-models').addEventListener('click', () => {
+  const type = Number($('#channel-type').value)
+  const patterns = { 1: /^(gpt-|o\d|text-|dall-e)/i, 14: /^claude/i, 24: /^gemini/i, 34: /^(command|embed)/i, 42: /^(mistral|codestral)/i, 43: /^deepseek/i, 48: /^grok/i }
+  const all = normalizeModelList(channelMetadata.all_models?.length ? channelMetadata.all_models : channelMetadata.models)
+  appendModels(patterns[type] ? all.filter((model) => patterns[type].test(model)) : all, true)
+})
+$('#clear-models').addEventListener('click', () => { $('#models').value = '' })
+$('#copy-models').addEventListener('click', async () => { await copyText($('#models').value); toast('模型列表已复制') })
+$('#fetch-upstream-models').addEventListener('click', async (event) => {
+  const form = new FormData($('#channel-form'))
+  const key = String(form.get('key') || '').trim()
+  if (!key) { toast('请先填写渠道密钥', true); return }
+  event.currentTarget.disabled = true
+  try {
+    const models = await api('/api/newapi/fetch-models', { method: 'POST', body: JSON.stringify({ type: Number(form.get('type')), key, base_url: String(form.get('base_url') || '') }) })
+    appendModels(models, true)
+    toast(`已获取 ${models.length} 个上游模型`)
+  } catch (err) { toast(err.message, true) } finally { event.currentTarget.disabled = false }
+})
 
 const jsonFields = ['model_mapping', 'status_code_mapping', 'setting', 'param_override', 'header_override', 'settings']
 function optionalJSON(form, field) {
   const raw = String(form.get(field) || '').trim()
   if (!raw) return undefined
   try { return JSON.stringify(JSON.parse(raw)) } catch { throw new Error(`${field} 不是有效 JSON`) }
+}
+
+function structuredJSON(formElement, form, rawField, attribute) {
+  let result = {}
+  const raw = String(form.get(rawField) || '').trim()
+  if (raw) {
+    result = JSON.parse(raw)
+    if (!result || Array.isArray(result) || typeof result !== 'object') throw new Error(`${rawField} 必须是 JSON 对象`)
+  }
+  formElement.querySelectorAll(`[${attribute}]`).forEach((input) => {
+    if (input.closest('.provider-field')?.classList.contains('hidden')) return
+    const key = input.getAttribute(attribute)
+    let value = input.type === 'checkbox' ? input.checked : input.value
+    if (input.type === 'number') value = Number(value || 0)
+    if (key === 'upstream_model_update_ignored_models') value = String(value).split(',').map((item) => item.trim()).filter(Boolean)
+    result[key] = value
+  })
+  if (attribute === 'data-setting-key') {
+    formElement.querySelectorAll('[data-setting-json-key]').forEach((input) => {
+      const rawValue = input.value.trim()
+      result[input.dataset.settingJsonKey] = rawValue ? JSON.parse(rawValue) : []
+    })
+  }
+  return JSON.stringify(result)
 }
 
 $('#channel-form').addEventListener('submit', async (event) => {
@@ -178,10 +253,24 @@ $('#channel-form').addEventListener('submit', async (event) => {
       name: form.get('name').trim(), type: Number(form.get('type')), key: form.get('key').trim(), models: form.get('models').trim(), group: groups.join(','),
       status: Number(form.get('status')), priority: Number(form.get('priority') || 0), weight: Number(form.get('weight') || 0), auto_ban: Number(form.get('auto_ban')), base_url: String(form.get('base_url') || ''),
     }
-    for (const field of ['test_model', 'openai_organization', 'tag', 'remark', 'other']) {
+    for (const field of ['test_model', 'openai_organization', 'tag', 'remark']) {
       const value = String(form.get(field) || '').trim(); if (value) channel[field] = value
     }
-    for (const field of jsonFields) { const value = optionalJSON(form, field); if (value !== undefined) channel[field] = value }
+    const providerOther = String(form.get('other') || '').trim()
+    const rawOther = String(form.get('other_raw') || '').trim()
+    if (providerOther || rawOther) channel.other = providerOther || rawOther
+    for (const field of ['model_mapping', 'status_code_mapping', 'param_override', 'header_override']) { const value = optionalJSON(form, field); if (value !== undefined) channel[field] = value }
+    const setting = JSON.parse(structuredJSON(event.currentTarget, form, 'setting', 'data-setting-key'))
+    const settings = JSON.parse(structuredJSON(event.currentTarget, form, 'settings', 'data-settings-key'))
+    const channelType = Number(form.get('type'))
+    if (channelType === 3 && form.get('azure_responses_version')) settings.azure_responses_version = form.get('azure_responses_version')
+    if (channelType === 20) settings.openrouter_enterprise = form.get('openrouter_enterprise') === 'true'
+    if (channelType === 33) settings.aws_key_type = form.get('aws_key_type') || 'ak_sk'
+    if (channelType === 41) settings.vertex_key_type = form.get('vertex_key_type') || 'json'
+    if (channelType === 58 && String(form.get('advanced_custom') || '').trim()) settings.advanced_custom = JSON.parse(form.get('advanced_custom'))
+    if ([14, 33].includes(channelType) && $('#web-search-key').value.trim()) settings.web_search_emulation = { enabled: $('#web-search-enabled').checked, type: $('#web-search-type').value, api_key: $('#web-search-key').value.trim(), use_channel_proxy: $('#web-search-proxy').checked, max_results: Number($('#web-search-max').value || 5) }
+    channel.setting = JSON.stringify(setting)
+    channel.settings = JSON.stringify(settings)
     const extraRaw = String(form.get('extra_json') || '').trim()
     if (extraRaw) {
       const extra = JSON.parse(extraRaw)

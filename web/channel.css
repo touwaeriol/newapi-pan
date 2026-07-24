@@ -1,0 +1,21 @@
+.provider-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.model-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: -8px;
+}
+
+.model-toolbar button { font-size: 12px; }
+.structured-settings .check { padding: 10px 0; border-bottom: 1px solid #eceeed; }
+.advanced details[open] summary { color: var(--accent); }
+
+@media (max-width: 650px) {
+  .provider-fields { grid-template-columns: 1fr; }
+  .model-toolbar { grid-column: span 1; }
+}

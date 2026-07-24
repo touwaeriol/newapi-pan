@@ -107,7 +107,26 @@ func (c *newAPIClient) metadata(ctx context.Context) (map[string]any, error) {
 	if modelsData, modelsErr := c.request(ctx, http.MethodGet, "/api/channel/models_enabled", nil); modelsErr == nil {
 		_ = json.Unmarshal(modelsData, &models)
 	}
-	return map[string]any{"groups": groups, "models": models}, nil
+	allModels := make([]map[string]any, 0)
+	if modelsData, modelsErr := c.request(ctx, http.MethodGet, "/api/channel/models", nil); modelsErr == nil {
+		_ = json.Unmarshal(modelsData, &allModels)
+	}
+	prefillGroups := make([]map[string]any, 0)
+	if prefillData, prefillErr := c.request(ctx, http.MethodGet, "/api/prefill_group/?type=model", nil); prefillErr == nil {
+		_ = json.Unmarshal(prefillData, &prefillGroups)
+	}
+	return map[string]any{"groups": groups, "models": models, "all_models": allModels, "prefill_groups": prefillGroups}, nil
+}
+
+func normalizeChannelBaseURL(channelType int, baseURL string) (string, error) {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if channelType != 14 {
+		return "", nil
+	}
+	if baseURL != "" && baseURL != anthropicBaseURL {
+		return "", errors.New("Anthropic Base URL 只允许为空或 https://openrouter.ai/api")
+	}
+	return baseURL, nil
 }
 
 func normalizeChannel(channel map[string]any) (string, int, error) {
@@ -126,14 +145,11 @@ func normalizeChannel(channel map[string]any) (string, int, error) {
 	channel["name"] = name
 	channel["type"] = typeNumber
 	requestedBaseURL, _ := channel["base_url"].(string)
-	requestedBaseURL = strings.TrimRight(strings.TrimSpace(requestedBaseURL), "/")
-	channel["base_url"] = ""
-	if typeNumber == 14 {
-		if requestedBaseURL != "" && requestedBaseURL != anthropicBaseURL {
-			return "", 0, errors.New("Anthropic Base URL 只允许为空或 https://openrouter.ai/api")
-		}
-		channel["base_url"] = requestedBaseURL
+	normalizedBaseURL, err := normalizeChannelBaseURL(typeNumber, requestedBaseURL)
+	if err != nil {
+		return "", 0, err
 	}
+	channel["base_url"] = normalizedBaseURL
 	defaults := map[string]any{"status": 1, "priority": 0, "weight": 0, "auto_ban": 1}
 	for key, value := range defaults {
 		if _, exists := channel[key]; !exists {
@@ -163,4 +179,22 @@ func numberAsInt(value any) (int, bool) {
 func (c *newAPIClient) createChannel(ctx context.Context, request map[string]any) error {
 	_, err := c.request(ctx, http.MethodPost, "/api/channel/", request)
 	return err
+}
+
+func (c *newAPIClient) fetchModels(ctx context.Context, channelType int, key, baseURL string) ([]string, error) {
+	baseURL, err := normalizeChannelBaseURL(channelType, baseURL)
+	if err != nil {
+		return nil, err
+	}
+	data, err := c.request(ctx, http.MethodPost, "/api/channel/fetch_models", map[string]any{
+		"type": channelType, "key": strings.TrimSpace(key), "base_url": baseURL,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var models []string
+	if err := json.Unmarshal(data, &models); err != nil {
+		return nil, errors.New("New API 上游模型响应格式不兼容")
+	}
+	return models, nil
 }

@@ -66,6 +66,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /api/me", s.withAuth(s.me))
 	mux.HandleFunc("GET /api/platform", s.withAuth(s.platform))
 	mux.HandleFunc("GET /api/newapi/metadata", s.withAuth(s.metadata))
+	mux.HandleFunc("POST /api/newapi/fetch-models", s.withAuth(s.fetchModels))
 	mux.HandleFunc("POST /api/channels", s.withAuth(s.createChannel))
 	mux.HandleFunc("GET /api/admin/users", s.withAdmin(s.listUsers))
 	mux.HandleFunc("POST /api/admin/users", s.withAdmin(s.createUser))
@@ -255,6 +256,32 @@ func (s *server) metadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeOK(w, data)
+}
+
+func (s *server) fetchModels(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Type    int    `json:"type"`
+		Key     string `json:"key"`
+		BaseURL string `json:"base_url"`
+	}
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if body.Type < 1 || body.Type > 58 || strings.TrimSpace(body.Key) == "" {
+		writeError(w, http.StatusBadRequest, "渠道类型和密钥为必填项")
+		return
+	}
+	models, err := s.newAPI.fetchModels(r.Context(), body.Type, body.Key, body.BaseURL)
+	if err != nil {
+		if strings.Contains(err.Error(), "Base URL") {
+			writeError(w, http.StatusBadRequest, err.Error())
+		} else {
+			writeError(w, http.StatusBadGateway, err.Error())
+		}
+		return
+	}
+	writeOK(w, models)
 }
 
 func (s *server) createChannel(w http.ResponseWriter, r *http.Request) {

@@ -6,6 +6,7 @@
   <title>渠道上传平台</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/settings.css">
+  <link rel="stylesheet" href="/channel.css">
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -61,7 +62,7 @@
         <div class="hero"><div><span class="eyebrow">CREATE ONLY WORKSPACE</span><h1>创建新渠道</h1><p>填写渠道密钥与配置，平台将直接提交至 New API。</p></div><div class="policy-card"><span>BASE URL POLICY</span><b id="base-policy">强制留空</b><small>Anthropic 可选择留空或 openrouter.ai/api</small></div></div>
         <form id="channel-form">
           <section class="panel form-section">
-            <div class="section-number">01</div><div class="section-head"><h2>基础信息</h2><p>名称、类型、密钥与创建模式</p></div>
+            <div class="section-number">01</div><div class="section-head"><h2>基础信息</h2><p>与 New API 的添加渠道表单一致</p></div>
             <div class="form-grid">
               <label>渠道名称 *<input name="name" required maxlength="120" placeholder="例如：供应商-A"></label>
               <label>渠道类型 *<select name="type" id="channel-type" required></select></label>
@@ -70,6 +71,14 @@
               <label>多密钥策略<select name="multi_key_mode"><option value="random">随机</option><option value="polling">轮询</option></select></label>
               <label class="check"><input name="batch_prefix" type="checkbox"><span>批量时用密钥前缀补充渠道名</span></label>
               <label>Anthropic Base URL<select name="base_url" id="anthropic-base-url" disabled><option value="">空</option><option value="https://openrouter.ai/api">https://openrouter.ai/api</option></select></label>
+              <div id="provider-fields" class="span-2 provider-fields">
+                <label class="provider-field hidden" data-types="3">Responses API 版本<input name="azure_responses_version" placeholder="例如：preview"></label>
+                <label class="provider-field hidden" data-types="18,21,39,49"><span id="provider-other-label">附加配置</span><input name="other" id="provider-other"></label>
+                <label class="provider-field hidden" data-types="20">OpenRouter 企业账号<select name="openrouter_enterprise"><option value="false">否</option><option value="true">是</option></select></label>
+                <label class="provider-field hidden" data-types="33">AWS 密钥格式<select name="aws_key_type"><option value="ak_sk">AccessKey / SecretAccessKey</option><option value="ak_sk_session">AK / SK / Session Token</option><option value="api_key">API Key</option></select></label>
+                <label class="provider-field hidden" data-types="41">Vertex AI 密钥格式<select name="vertex_key_type"><option value="json">服务账号 JSON</option><option value="api_key">API Key</option></select></label>
+                <label class="provider-field hidden" data-types="58">高级自定义路由 JSON<textarea name="advanced_custom" rows="5" placeholder='{"advanced_routes":[]}'></textarea></label>
+              </div>
             </div>
           </section>
 
@@ -77,9 +86,11 @@
             <div class="section-number">02</div><div class="section-head"><h2>模型与分组</h2><p>数据实时读取自 New API</p></div>
             <div class="form-grid">
               <label class="span-2">模型 *<textarea name="models" id="models" required rows="3" placeholder="gpt-4o,claude-3-5-sonnet"></textarea><small>多个模型用英文逗号分隔</small></label>
+              <div class="span-2 model-toolbar"><button id="fill-related-models" class="ghost" type="button">填入相关模型</button><button id="fill-all-models" class="ghost" type="button">填入全部模型</button><button id="fetch-upstream-models" class="ghost" type="button">获取上游模型</button><button id="copy-models" class="ghost" type="button">复制</button><button id="clear-models" class="ghost" type="button">清空</button></div>
+              <div id="prefill-groups" class="span-2 choice-grid"></div>
               <fieldset class="span-2"><legend>分组 *</legend><div id="groups" class="choice-grid"><span class="muted">正在读取分组…</span></div></fieldset>
               <label>测试模型<input name="test_model" list="model-options" placeholder="可选"></label><datalist id="model-options"></datalist>
-              <label>OpenAI Organization<input name="openai_organization" placeholder="可选"></label>
+              <label id="openai-organization-field">OpenAI Organization<input name="openai_organization" placeholder="org-..."></label>
             </div>
           </section>
 
@@ -103,10 +114,59 @@
               <label>参数覆盖 param_override<textarea name="param_override" rows="5" placeholder="{}"></textarea></label>
               <label>请求头覆盖 header_override<textarea name="header_override" rows="5" placeholder="{}"></textarea></label>
             </div></details>
-            <details><summary>渠道 setting 与 settings</summary><div class="form-grid">
+            <details><summary>请求、重试与代理</summary><div class="form-grid structured-settings">
+              <label class="check"><input type="checkbox" data-setting-key="thinking_to_content"><span>思维内容转换</span></label>
+              <label class="check"><input type="checkbox" data-setting-key="pass_through_body_enabled"><span>请求体透传</span></label>
+              <label class="check provider-field" data-types="1"><input type="checkbox" data-setting-key="force_format"><span>强制 OpenAI 格式</span></label>
+              <label class="check"><input type="checkbox" data-settings-key="disable_task_polling_sleep"><span>跳过异步任务轮询延迟</span></label>
+              <label>代理地址<input data-setting-key="proxy" placeholder="socks5://user:pass@host:port"></label>
+              <label>系统提示词<input data-setting-key="system_prompt"></label>
+              <label class="check"><input type="checkbox" data-setting-key="system_prompt_override"><span>覆盖系统提示词</span></label>
+              <label class="check"><input type="checkbox" data-setting-key="retry_429_enabled"><span>启用 429 重试</span></label>
+              <label>429 重试次数<input type="number" min="0" value="5" data-setting-key="retry_429_times"></label>
+              <label>重试间隔（毫秒）<input type="number" min="0" value="1000" data-setting-key="retry_429_interval_ms"></label>
+              <label class="check"><input type="checkbox" data-setting-key="raw_quota_accounting"><span>原始倍率额度计费</span></label>
+            </div></details>
+            <details><summary>配额与速率限制</summary><div class="form-grid structured-settings">
+              <label class="check"><input type="checkbox" data-setting-key="quota_limit_enabled"><span>启用周期额度限制</span></label>
+              <label>额度上限<input type="number" min="0" value="0" data-setting-key="quota_limit_amount"></label>
+              <label>重置周期<select data-setting-key="quota_reset_period"><option value="month">月</option><option value="week">周</option><option value="day">日</option><option value="hour">小时</option><option value="none">不重置</option></select></label>
+              <label>周期值<input type="number" min="1" value="1" data-setting-key="quota_reset_period_value"></label>
+              <label>额度周期起点（Unix 秒）<input type="number" min="0" value="0" data-setting-key="quota_limit_start_time"></label>
+              <label class="check"><input type="checkbox" data-setting-key="rate_limit_enabled"><span>启用速率限制</span></label>
+              <label>RPM<input type="number" min="0" value="0" data-setting-key="rpm_limit"></label>
+              <label>TPM<input type="number" min="0" value="0" data-setting-key="tpm_limit"></label>
+              <label>TPD<input type="number" min="0" value="0" data-setting-key="tpd_limit"></label>
+              <label>时区<input value="UTC" data-setting-key="rate_limit_timezone"></label>
+              <label class="check"><input type="checkbox" data-setting-key="smooth_rate_limit_enabled"><span>均匀速率限制</span></label>
+              <label>均匀间隔<input type="number" min="0" value="0" data-setting-key="smooth_rate_limit_interval"></label>
+              <label class="check"><input type="checkbox" data-setting-key="adaptive_rate_limit_enabled"><span>自适应速率限制</span></label>
+              <label>自适应步长<input type="number" min="1" max="100" value="10" data-setting-key="adaptive_rate_limit_step"></label>
+              <label class="span-2">按模型速率限制 JSON<textarea rows="4" data-setting-json-key="model_rate_limits" placeholder='[{"models":["gpt-4o"],"rpm":10,"tpm":10000,"tpd":0}]'></textarea></label>
+            </div></details>
+            <details><summary>提供商与字段透传</summary><div class="form-grid structured-settings">
+              <label class="check provider-field" data-types="1,14,57"><input type="checkbox" data-settings-key="allow_service_tier"><span>允许 service_tier</span></label>
+              <label class="check provider-field" data-types="1,57"><input type="checkbox" data-settings-key="disable_store"><span>禁用 store 透传</span></label>
+              <label class="check provider-field" data-types="1,57"><input type="checkbox" data-settings-key="allow_safety_identifier"><span>允许 safety_identifier</span></label>
+              <label class="check provider-field" data-types="1,57"><input type="checkbox" data-settings-key="allow_include_obfuscation"><span>允许 usage obfuscation</span></label>
+              <label class="check provider-field" data-types="1,14,57"><input type="checkbox" data-settings-key="allow_inference_geo"><span>允许 inference_geo</span></label>
+              <label class="check provider-field" data-types="14"><input type="checkbox" data-settings-key="allow_speed"><span>允许 speed</span></label>
+              <label class="check provider-field" data-types="14"><input type="checkbox" data-settings-key="claude_beta_query"><span>Claude Beta 查询参数</span></label>
+              <label class="check"><input type="checkbox" data-settings-key="upstream_model_update_check_enabled"><span>检测上游模型更新</span></label>
+              <label class="check"><input type="checkbox" data-settings-key="upstream_model_update_auto_sync_enabled"><span>自动同步上游模型</span></label>
+              <label class="span-2">忽略的上游模型<input data-settings-key="upstream_model_update_ignored_models" placeholder="gpt-4.1-nano,regex:^claude-.*$"></label>
+              <div class="span-2 provider-fields provider-field" data-types="14,33">
+                <label class="check"><input type="checkbox" id="web-search-enabled"><span>启用联网搜索模拟</span></label>
+                <label>搜索提供商<select id="web-search-type"><option value="tavily">Tavily</option><option value="brave">Brave</option></select></label>
+                <label>搜索 API 密钥<input id="web-search-key" type="password" autocomplete="new-password"></label>
+                <label>最大结果数<input id="web-search-max" type="number" min="1" value="5"></label>
+                <label class="check"><input type="checkbox" id="web-search-proxy"><span>使用渠道代理</span></label>
+              </div>
+            </div></details>
+            <details><summary>渠道 setting 与 settings（高级 JSON）</summary><div class="form-grid">
               <label>setting JSON<textarea name="setting" rows="8" placeholder='{"force_format":false,"retry_429_enabled":false}'></textarea><small>代理、429 重试、配额与速率限制等</small></label>
               <label>settings JSON<textarea name="settings" rows="8" placeholder='{"claude_beta_query":false,"aws_key_type":"ak_sk"}'></textarea><small>Azure、Vertex、AWS、Anthropic 等提供商设置</small></label>
-              <label class="span-2">other（原始字符串）<textarea name="other" rows="3"></textarea></label>
+              <label class="span-2">other（原始字符串备用）<textarea name="other_raw" rows="3"></textarea></label>
             </div></details>
             <details><summary>完整字段覆盖</summary><label>额外渠道 JSON 对象<textarea name="extra_json" rows="9" placeholder='{"channel_info":{"is_multi_key":false}}'></textarea><small>用于承载当前或未来版本的任意 New API 渠道字段；Base URL 与服务端字段仍由平台强制控制。</small></label></details>
           </section>

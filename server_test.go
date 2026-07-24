@@ -214,3 +214,48 @@ func TestAdminCanSaveEncryptedNewAPISettings(t *testing.T) {
 		t.Fatalf("saved token decrypt failed: %v", err)
 	}
 }
+
+func TestUserCanFetchUpstreamModelsThroughNewAPI(t *testing.T) {
+	var captured map[string]any
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/channel/fetch_models" || r.Method != http.MethodPost {
+			t.Fatalf("unexpected upstream request: %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			t.Fatal(err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "data": []string{"claude-3-7-sonnet", "claude-opus-4"}})
+	}))
+	defer upstream.Close()
+
+	st := &fakeStore{users: []user{{ID: 2, Username: "member", Role: "user", Status: 1}}, sessions: map[string]user{}}
+	app := httptest.NewServer(newServer(config{NewAPIBaseURL: upstream.URL, NewAPIAccessToken: "personal-token", NewAPIUserID: "1", SessionTTL: time.Hour}, st).routes())
+	defer app.Close()
+	client := &http.Client{Jar: newTestCookieJar(t)}
+	res, err := client.Post(app.URL+"/api/auth/login", "application/json", strings.NewReader(`{"username":"member","password":"member-pass-123"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+
+	res, err = client.Post(app.URL+"/api/newapi/fetch-models", "application/json", strings.NewReader(`{"type":14,"key":"sk-ant-test","base_url":"https://openrouter.ai/api/"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("fetch models status = %d", res.StatusCode)
+	}
+	if captured["base_url"] != anthropicBaseURL || captured["key"] != "sk-ant-test" {
+		t.Fatalf("unexpected upstream payload: %#v", captured)
+	}
+
+	res, err = client.Post(app.URL+"/api/newapi/fetch-models", "application/json", strings.NewReader(`{"type":14,"key":"sk-ant-test","base_url":"https://invalid.example"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid base url status = %d, want 400", res.StatusCode)
+	}
+}
